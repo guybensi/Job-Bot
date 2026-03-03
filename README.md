@@ -49,6 +49,42 @@ python -m src.bot
 
 The bot will start polling for messages and schedule job searches every 2 hours.
 
+## Deploy to Render (free, runs 24/7)
+
+You can deploy this bot to [Render](https://render.com) so it runs in the cloud without keeping your computer on.
+
+### Step-by-step
+
+1. **Push your code to GitHub.**
+   If you haven't already:
+   ```bash
+   git add -A
+   git commit -m "ready for deploy"
+   git push origin main
+   ```
+
+2. **Sign up at [render.com](https://render.com)** (free account, no credit card needed).
+
+3. **Create a new service:**
+   - Click **"New +"** in the top bar.
+   - Select **"Background Worker"** (not "Web Service" — the bot uses polling, not webhooks).
+
+4. **Connect your GitHub repo** (`github.com/guybensi/Job-Bot`).
+
+5. **Render detects the Dockerfile automatically.** No build command needed.
+
+6. **Add environment variables** in the Render dashboard (Environment tab):
+   | Key | Value |
+   |---|---|
+   | `TELEGRAM_BOT_TOKEN` | Your bot token from BotFather |
+   | `ADZUNA_APP_ID` | Your Adzuna app ID |
+   | `ADZUNA_APP_KEY` | Your Adzuna app key |
+   | `ADZUNA_COUNTRY` | `il` |
+
+7. **Click "Create Background Worker".** Render will build the Docker image and start the bot. It stays running 24/7.
+
+> **Tip:** Every time you push to `main`, Render will automatically redeploy with the latest code.
+
 ## Bot Commands
 
 | Command | Description |

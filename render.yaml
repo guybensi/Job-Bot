@@ -1,0 +1,21 @@
+services:
+  - type: worker
+    name: job-alert-bot
+    runtime: docker
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: ADZUNA_APP_ID
+        sync: false
+      - key: ADZUNA_APP_KEY
+        sync: false
+      - key: ADZUNA_COUNTRY
+        value: il
+      - key: ARBEITNOW_ENABLED
+        value: "true"
+      - key: REMOTIVE_ENABLED
+        value: "true"
+      - key: SEARCH_INTERVAL_HOURS
+        value: "2"
+      - key: LOG_LEVEL
+        value: INFO

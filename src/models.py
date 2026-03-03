@@ -45,6 +45,45 @@ WORK_MODE_OPTIONS: list[str] = [
     "Remote",
 ]
 
+SENIOR_TITLE_KEYWORDS: list[str] = [
+    "senior", "sr.", "sr ", "staff", "principal", "lead",
+    "director", "head of", "vp of", "vice president",
+    "architect", "distinguished", "fellow",
+]
+
+JUNIOR_EXPERIENCE_RANGES: list[str] = ["0-1", "1-3"]
+
+ISRAEL_LOCATION_KEYWORDS: list[str] = [
+    "israel",
+    "tel aviv",
+    "tel-aviv",
+    "jerusalem",
+    "haifa",
+    "beer sheva",
+    "be'er sheva",
+    "beersheba",
+    "ramat gan",
+    "herzliya",
+    "herzelia",
+    "petah tikva",
+    "petach tikva",
+    "netanya",
+    "rishon lezion",
+    "rishon letziyon",
+    "holon",
+    "bnei brak",
+    "rehovot",
+    "ashdod",
+    "ashkelon",
+    "modiin",
+    "modi'in",
+    "kfar saba",
+    "ra'anana",
+    "raanana",
+    "yokneam",
+    "caesarea",
+]
+
 ROLE_SYNONYMS: dict[str, list[str]] = {
     "Software Engineer": ["software engineer", "software developer", "swe"],
     "Frontend Developer": ["frontend", "front-end", "front end", "react", "vue", "angular"],

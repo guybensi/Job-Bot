@@ -53,20 +53,27 @@ def _setup_logging(config: Config) -> None:
     logging.getLogger("apscheduler").setLevel(logging.WARNING)
 
 
+_scheduler = None
+
+
 async def post_init(application: Application) -> None:
     """Called by python-telegram-bot after the Application is built.
 
-    Initialises the database and registers bot commands with BotFather so
-    they appear in the Telegram command menu.
+    Initialises the database, starts the APScheduler (now that an event loop
+    is running), and registers bot commands with BotFather.
 
     Examples:
         >>> await post_init(app)
-        # DB tables created, 6 commands registered with Telegram
+        # DB tables created, scheduler started, 6 commands registered
 
         >>> await post_init(app)  # idempotent — safe to call again
-        # Tables already exist, commands re-registered (no-op from Telegram's side)
+        # Tables already exist, commands re-registered
     """
     await db.init_db()
+
+    if _scheduler and not _scheduler.running:
+        _scheduler.start()
+        logging.getLogger(__name__).info("Scheduler started inside event loop")
 
     commands = [
         ("start", "Set up your job preferences"),
@@ -89,6 +96,8 @@ def main() -> None:
         >>> main()  # with missing TELEGRAM_BOT_TOKEN
         # Prints "ERROR: TELEGRAM_BOT_TOKEN is not set in .env" and exits
     """
+    global _scheduler
+
     config = load_config()
     _setup_logging(config)
 
@@ -102,8 +111,7 @@ def main() -> None:
     register_handlers(app)
     set_run_now_callback(run_now)
 
-    scheduler = init_scheduler(config, app.bot)
-    scheduler.start()
+    _scheduler = init_scheduler(config, app.bot)
 
     logger.info("Bot is running — polling for updates")
     app.run_polling(drop_pending_updates=True)

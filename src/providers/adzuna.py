@@ -6,7 +6,14 @@ from datetime import datetime, timezone
 
 import aiohttp
 
-from src.models import JobPost, UserPreferences, ROLE_SYNONYMS
+from src.models import (
+    JobPost,
+    UserPreferences,
+    ROLE_SYNONYMS,
+    SENIOR_TITLE_KEYWORDS,
+    JUNIOR_EXPERIENCE_RANGES,
+    ISRAEL_LOCATION_KEYWORDS,
+)
 from src.providers.base import JobProvider
 
 logger = logging.getLogger(__name__)
@@ -68,13 +75,17 @@ class AdzunaProvider(JobProvider):
             return []
 
         url = f"{API_BASE}/{self._country}/search/1"
-        params = {
+        params: dict[str, str | int] = {
             "app_id": self._app_id,
             "app_key": self._app_key,
             "results_per_page": 50,
             "what": keywords,
             "content-type": "application/json",
         }
+
+        where = _build_where(preferences)
+        if where:
+            params["where"] = where
 
         all_jobs: list[JobPost] = []
         try:
@@ -87,7 +98,7 @@ class AdzunaProvider(JobProvider):
 
             for item in data.get("results", []):
                 post = _parse_job(item)
-                if post:
+                if post and _experience_matches(post, preferences):
                     all_jobs.append(post)
 
         except Exception:
@@ -116,6 +127,55 @@ def _build_keywords(prefs: UserPreferences) -> str:
             continue
         parts.append(role)
     return " OR ".join(parts)
+
+
+def _build_where(prefs: UserPreferences) -> str:
+    """Build the Adzuna ``where`` query parameter from user locations.
+
+    Maps Israeli region names to city names Adzuna understands.
+
+    Examples:
+        >>> _build_where(UserPreferences(user_id=1, chat_id=1, locations=["Tel Aviv"]))
+        'Tel Aviv'
+
+        >>> _build_where(UserPreferences(user_id=2, chat_id=2, locations=["Remote-Only"]))
+        ''
+    """
+    location_map = {
+        "Tel Aviv": "Tel Aviv",
+        "Jerusalem": "Jerusalem",
+        "Center": "Tel Aviv",
+        "South": "Beer Sheva",
+        "North": "Haifa",
+    }
+    parts: list[str] = []
+    for loc in prefs.locations:
+        mapped = location_map.get(loc)
+        if mapped and mapped not in parts:
+            parts.append(mapped)
+    return ", ".join(parts)
+
+
+def _experience_matches(job: JobPost, prefs: UserPreferences) -> bool:
+    """Reject senior-level titles when the user has junior-level experience.
+
+    Examples:
+        >>> job = JobPost(source="adzuna", job_id="1", title="Senior QA Lead",
+        ...               company="X", location="Tel Aviv", url="u")
+        >>> _experience_matches(job, UserPreferences(user_id=1, chat_id=1, years_exp="0-1"))
+        False
+
+        >>> _experience_matches(job, UserPreferences(user_id=2, chat_id=2, years_exp="5-8"))
+        True
+    """
+    if prefs.years_exp not in JUNIOR_EXPERIENCE_RANGES:
+        return True
+
+    title_lower = job.title.lower()
+    for keyword in SENIOR_TITLE_KEYWORDS:
+        if keyword in title_lower:
+            return False
+    return True
 
 
 def _parse_job(item: dict) -> JobPost | None:

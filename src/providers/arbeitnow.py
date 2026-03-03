@@ -6,7 +6,14 @@ from datetime import datetime, timezone
 
 import aiohttp
 
-from src.models import JobPost, UserPreferences, ROLE_SYNONYMS
+from src.models import (
+    JobPost,
+    UserPreferences,
+    ROLE_SYNONYMS,
+    SENIOR_TITLE_KEYWORDS,
+    JUNIOR_EXPERIENCE_RANGES,
+    ISRAEL_LOCATION_KEYWORDS,
+)
 from src.providers.base import JobProvider
 
 logger = logging.getLogger(__name__)
@@ -143,6 +150,8 @@ def _matches(job: JobPost, prefs: UserPreferences) -> bool:
     """
     if not _role_matches(job, prefs):
         return False
+    if not _experience_matches(job, prefs):
+        return False
     if not _location_matches(job, prefs):
         return False
     if not _mode_matches(job, prefs):
@@ -183,11 +192,36 @@ def _role_matches(job: JobPost, prefs: UserPreferences) -> bool:
     return False
 
 
-def _location_matches(job: JobPost, prefs: UserPreferences) -> bool:
-    """Check if the job's location matches any of the user's preferred locations.
+def _experience_matches(job: JobPost, prefs: UserPreferences) -> bool:
+    """Reject senior-level titles when the user has junior-level experience.
 
-    "Remote-Only" matches jobs flagged as remote. An empty preference list
-    matches everything.
+    Users with "0-1" or "1-3" years will not see jobs whose title contains
+    words like "Senior", "Staff", "Lead", "Principal", etc.
+
+    Examples:
+        >>> job = JobPost(source="a", job_id="1", title="Senior Backend Developer",
+        ...               company="X", location="", url="u")
+        >>> _experience_matches(job, UserPreferences(user_id=1, chat_id=1, years_exp="0-1"))
+        False
+
+        >>> _experience_matches(job, UserPreferences(user_id=2, chat_id=2, years_exp="5-8"))
+        True  # experienced user — no filtering
+    """
+    if prefs.years_exp not in JUNIOR_EXPERIENCE_RANGES:
+        return True
+
+    title_lower = job.title.lower()
+    for keyword in SENIOR_TITLE_KEYWORDS:
+        if keyword in title_lower:
+            return False
+    return True
+
+
+def _location_matches(job: JobPost, prefs: UserPreferences) -> bool:
+    """Check that the job is located in Israel or is a remote position.
+
+    Only jobs whose location field contains an Israeli city name, "israel",
+    or that are flagged remote (when the user wants remote) pass through.
 
     Examples:
         >>> job = JobPost(source="a", job_id="1", title="SWE", company="X",
@@ -196,23 +230,28 @@ def _location_matches(job: JobPost, prefs: UserPreferences) -> bool:
         >>> _location_matches(job, prefs)
         True
 
-        >>> prefs2 = UserPreferences(user_id=2, chat_id=2, locations=["Remote-Only"])
-        >>> _location_matches(job, prefs2)
-        False  # job is not remote
+        >>> job2 = JobPost(source="a", job_id="2", title="SWE", company="X",
+        ...                location="New York, US", url="u", remote=False)
+        >>> _location_matches(job2, prefs)
+        False  # not in Israel
     """
-    if not prefs.locations:
-        return True
     if "Remote-Only" in prefs.locations and job.remote:
         return True
 
     loc_lower = job.location.lower()
-    for pref_loc in prefs.locations:
-        if pref_loc == "Remote-Only":
-            continue
+
+    if not any(kw in loc_lower for kw in ISRAEL_LOCATION_KEYWORDS):
+        return False
+
+    non_remote_locs = [l for l in prefs.locations if l != "Remote-Only"]
+    if not non_remote_locs:
+        return True
+
+    for pref_loc in non_remote_locs:
         if pref_loc.lower() in loc_lower:
             return True
 
-    return False
+    return True
 
 
 def _mode_matches(job: JobPost, prefs: UserPreferences) -> bool:

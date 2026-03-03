@@ -6,7 +6,13 @@ from datetime import datetime, timezone
 
 import aiohttp
 
-from src.models import JobPost, UserPreferences, ROLE_SYNONYMS
+from src.models import (
+    JobPost,
+    UserPreferences,
+    ROLE_SYNONYMS,
+    SENIOR_TITLE_KEYWORDS,
+    JUNIOR_EXPERIENCE_RANGES,
+)
 from src.providers.base import JobProvider
 
 logger = logging.getLogger(__name__)
@@ -50,22 +56,29 @@ class RemotiveProvider(JobProvider):
     async def search(self, preferences: UserPreferences) -> list[JobPost]:
         """Fetch remote job listings from Remotive filtered by mapped categories.
 
-        Maps user roles to Remotive's category slugs (e.g. "Software Engineer"
-        → "software-dev"), fetches each category, then filters results by role
-        keyword matching.
+        Skips entirely when the user has no "Remote-Only" location and their
+        work mode is not "Remote", since Remotive only lists remote positions.
 
         Examples:
             >>> prefs = UserPreferences(user_id=1, chat_id=1,
             ...     roles=["DevOps Engineer"], locations=["Remote-Only"], work_mode="Remote")
             >>> jobs = await RemotiveProvider().search(prefs)
             >>> all(j.remote for j in jobs)
-            True  # all Remotive jobs are remote
+            True
 
-            >>> prefs2 = UserPreferences(user_id=2, chat_id=2, roles=["Other"])
-            >>> jobs = await RemotiveProvider().search(prefs2)
-            >>> len(jobs) >= 0
-            True  # "Other" matches all titles
+            >>> prefs2 = UserPreferences(user_id=2, chat_id=2,
+            ...     roles=["DevOps Engineer"], locations=["Tel Aviv"], work_mode="On-site")
+            >>> await RemotiveProvider().search(prefs2)
+            []  # skipped — user wants on-site in Tel Aviv, not remote
         """
+        wants_remote = (
+            "Remote-Only" in preferences.locations
+            or preferences.work_mode == "Remote"
+        )
+        if not wants_remote:
+            logger.info("Remotive skipped — user %s has no remote preference", preferences.user_id)
+            return []
+
         categories = set()
         for role in preferences.roles:
             cat = CATEGORY_MAP.get(role)
@@ -92,7 +105,7 @@ class RemotiveProvider(JobProvider):
 
                     for item in data.get("jobs", []):
                         post = _parse_job(item)
-                        if post and _role_matches(post, preferences):
+                        if post and _matches(post, preferences):
                             all_jobs.append(post)
 
         except Exception:
@@ -150,6 +163,29 @@ def _parse_job(item: dict) -> JobPost | None:
     )
 
 
+def _matches(job: JobPost, prefs: UserPreferences) -> bool:
+    """Return True if the job passes role and experience filters.
+
+    Examples:
+        >>> job = JobPost(source="remotive", job_id="1", title="Junior DevOps Engineer",
+        ...               company="X", location="Remote", url="u", remote=True)
+        >>> _matches(job, UserPreferences(user_id=1, chat_id=1,
+        ...     roles=["DevOps Engineer"], years_exp="0-1"))
+        True
+
+        >>> job2 = JobPost(source="remotive", job_id="2", title="Senior Staff SWE",
+        ...                company="X", location="Remote", url="u", remote=True)
+        >>> _matches(job2, UserPreferences(user_id=2, chat_id=2,
+        ...     roles=["Software Engineer"], years_exp="0-1"))
+        False  # senior title rejected for junior user
+    """
+    if not _role_matches(job, prefs):
+        return False
+    if not _experience_matches(job, prefs):
+        return False
+    return True
+
+
 def _role_matches(job: JobPost, prefs: UserPreferences) -> bool:
     """Check if the job title or tags contain any synonym for the user's roles.
 
@@ -159,7 +195,7 @@ def _role_matches(job: JobPost, prefs: UserPreferences) -> bool:
         >>> job = JobPost(source="remotive", job_id="1", title="Senior DevOps Engineer",
         ...               company="X", location="Remote", url="u", remote=True)
         >>> _role_matches(job, UserPreferences(user_id=1, chat_id=1, roles=["DevOps Engineer"]))
-        True  # "devops" is a synonym
+        True
 
         >>> _role_matches(job, UserPreferences(user_id=2, chat_id=2, roles=["UI/UX Designer"]))
         False
@@ -179,3 +215,25 @@ def _role_matches(job: JobPost, prefs: UserPreferences) -> bool:
             if syn in text:
                 return True
     return False
+
+
+def _experience_matches(job: JobPost, prefs: UserPreferences) -> bool:
+    """Reject senior-level titles when the user has junior-level experience.
+
+    Examples:
+        >>> job = JobPost(source="remotive", job_id="1", title="Staff ML Engineer",
+        ...               company="X", location="Remote", url="u", remote=True)
+        >>> _experience_matches(job, UserPreferences(user_id=1, chat_id=1, years_exp="0-1"))
+        False
+
+        >>> _experience_matches(job, UserPreferences(user_id=2, chat_id=2, years_exp="8+"))
+        True
+    """
+    if prefs.years_exp not in JUNIOR_EXPERIENCE_RANGES:
+        return True
+
+    title_lower = job.title.lower()
+    for keyword in SENIOR_TITLE_KEYWORDS:
+        if keyword in title_lower:
+            return False
+    return True
