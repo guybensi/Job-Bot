@@ -1,16 +1,27 @@
 # Job-Bot
 
-A Telegram bot that searches public job boards and sends you matching alerts every 2 hours.
+A Telegram bot that searches public job boards in Israel and sends you matching alerts every 2 hours.
+
+## Try It Now
+
+The bot is **live and running in the cloud** — no setup needed.
+
+1. Open Telegram.
+2. Search for **@MatchMyJobBot** or click [t.me/MatchMyJobBot](https://t.me/MatchMyJobBot).
+3. Send `/start` and follow the onboarding to set your preferences.
+4. You'll start receiving job alerts automatically every 2 hours.
 
 ## Features
 
 - **Onboarding flow** — multi-select job roles, years of experience, preferred locations, and work mode via inline keyboards.
-- **Pluggable providers** — ships with Arbeitnow (no key needed), Remotive, and optional Adzuna support.
+- **Israel-focused** — searches Adzuna (country=IL), Arbeitnow, and Remotive for Israeli and remote positions.
 - **Deduplication** — SQLite-backed seen-jobs table ensures you never receive the same listing twice.
 - **User commands** — `/now` for an instant search, `/pause` / `/resume` to control alerts, `/preferences` to view or edit.
 - **Scheduled searches** — APScheduler runs every 2 hours in the background.
 
-## Quick Start
+---
+
+## Developer Setup (run your own instance)
 
 ### 1. Create a Telegram Bot
 
